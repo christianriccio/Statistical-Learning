@@ -1,0 +1,362 @@
+---
+title: "Prediction of fish weight by using a Linear Regression Model"
+author:
+- name: Christian Riccio P37000002
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+abstract: The "Fish market" dataset has been analized from www.Kaggle.com. It is characterized           by 159 observations of 7 different specie of fish, for each of them are taken                 measurement of several attributes. The aim of this work is to verify if there's any           correlation between the weight of the fish and its physical dimensions.
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+
+## Introduction
+ 
+"Fish-farming" (sometimes known as "aquaculture") is the name used to indicate the growing of acquatic foods such as fishes, crustaceans, molluscs and acquatic plants. Aquaculture involves the cultivation of fresh and salt water species under controlled conditions. Fish-farming represents a way of controlling and/or facing poaching, since it is advantageous because it gives the possibility of increasing the quantity and the quality of the products in a controlled way, both from the point of view of storage and of nutrition.
+Markets surveys have shown that, from 1950 to 2016, the tons of fish produceed had a linear growth with a greater slope than free fishing. Regarding only to fish this technique involves their growth within large tanks or oceanic areas, with mainly commercial purposes.
+The applications of this techniques are a support for many sectors, among which the scientific disciplines and in particular the biomarines one.
+
+## Statistical Question
+Is there any possibility of predicting the weight of a fish without measuring it? We would like to investigate the correlation between the weight and the physical dimensions of the fish for the purpose, if it is possible, to estimate it. All of this passing throw a correlation model, which is the basis for answering to the question
+
+## Description of the dataset
+
+All the statistical analisys has been coducted with the RStudio software, by using RMarkdown. 
+Firstly, let's import and have a quickly look to the data-set:
+
+```{r}
+Fish_ok1 <- read.csv("C:/Users/Win/Desktop/Report_statistica/fish/Fish.csv", header=TRUE)
+colnames(Fish_ok1)[1]<-"Species"
+head(Fish_ok1)
+```
+
+
+An insight look to the data is shown in the following table:
+
+```{r}
+summary(Fish_ok1)
+dim(Fish_ok1)
+```
+The dataset is composed of:
+
+1. 159 observations;
+2. 7 variables:
+  - Species: is a categorical variable and the represents the different species of fishes;
+  - Weight: weight of fish in Gram;
+  - Length1: vertical length in cm;
+  - Length2: diagonal length in cm;
+  - Length3: cross length in cm;
+  - Height: height in cm;
+  - Width: width in cm.
+
+
+For the variable weight is possible to appreciate the minimum value of zero, which has no physical meaning, probably due to some mistakes in reporting the values of the dataset.
+Due to this, we would like to identify the value:
+
+```{r}
+Fish_ok1[!Fish_ok1[,2:ncol(Fish_ok1)]>0,]
+```
+
+Let's remove now the Null value and recalculate the summary:
+
+```{r}
+Fish_ok1<-Fish_ok1[-c(41),]
+summary(Fish_ok1)
+```
+```{r}
+sumna<-sum(is.na(Fish_ok1))
+print(paste("Number of NA values: ", sumna,sep="") )
+```
+
+Is also useful, for semplicity, to visualize the counts(numerosity) for each species:
+
+```{r}
+library(ggplot2)
+ggplot(data = Fish_ok1) +
+geom_bar(mapping = aes(x = Species, fill = Species))
+```
+
+## Principal statistical indexes
+
+For each species we can now introduce the principal statistical indixes:
+
+```{r}
+library(data.table)
+DT<- data.table(Fish_ok1)
+aggregation<-setnames(DT[, sapply(.SD, function(x) list(mean=round(mean(x), 3), sd=round(sd(x), 3))), by=Species], c("Species", sapply(names(DT)[-1], paste0, c(".men", ".SD"))))
+aggregation
+```
+
+
+
+Looking for anomalous values is necessary conduct an explorative analisys involving all variables which occour into the dataset, since for the operative point of view the cornerstones of representation are:
+
+1. *Minimum(X)*;
+2. *First Quartile(Q1)*;
+3. *Median (Me)*;
+4. *Tird interquartile(Q3)*;
+5. *Maximum(X)*;
+6. *Interquartile Difference (IQR=Q3-Q1)*.
+
+
+Interquartile difference is sometimes indicated with the name "interquartile gap", which represent the range of values which contain the half of central values observed, since this gap indicates a first measure of dispersion of how values are far from the central one represented by the median Me, we know to divide the distribution into 2 parts.
+In the box-plot, the whisker that goes from the most external quartile value to the maximum or minimum , has a length of 1,5 times more than the box.
+From box-plot's analisys, it is possible to undertand that more  simmetric is the casual variable more the whisker has the same length.
+
+
+
+```{r}
+library(reshape2)
+library(ggplot2)
+library(gridExtra)
+
+melted_fish_weight<-subset(Fish_ok1, select = c("Species", "Weight"))
+melted_fish_weight<- melt(melted_fish_weight)
+p1<-ggplot(data=melted_fish_weight, aes(x=variable, y=value)) + 
+  geom_boxplot(alpha=0.5, aes(fill = Species))
+
+melted_fish_lengths<- subset(Fish_ok1, select = c("Species", "Length1", "Length2", "Length3"))
+melted_fish_lengths<- melt(melted_fish_lengths)
+p2<-ggplot(data=melted_fish_lengths, aes(x=variable, y=value)) + 
+  geom_boxplot(alpha=0.5, aes(fill = Species)) 
+
+melted_fish_hw<- subset(Fish_ok1, select = c("Species", "Height", "Width"))
+melted_fish_hw<- melt(melted_fish_hw)
+p3<-ggplot(data=melted_fish_hw, aes(x=variable, y=value)) + 
+  geom_boxplot(alpha=0.5, aes(fill = Species))
+
+grid.arrange(p1,p2,p3 ,ncol=2)
+```
+
+
+
+Classifing by the different Species, the box-plot for the variable weight is shown in the above picture, from which is possible to see how the vacancy in counts for the "Smelt" spieces bring to a box-plot of non relevant meaning.On the other hand, for the "Perch", "Pike" and "Whitefish" species is easy to observe the positive asymmetric weight variable distributions; moreover the weight distribution for the "Whitefish" sudjest to have a look to the cumulative distribution function.
+
+```{r}
+library(magrittr)
+library(ggpubr)
+library(gridExtra)
+f1<-ggecdf(data=Fish_ok1, "Weight", color="Species")
+f2<-ggecdf(data=Fish_ok1, "Length1", color="Species")
+f3<-ggecdf(data=Fish_ok1, "Height", color="Species")
+f4<-ggecdf(data=Fish_ok1, "Width", color="Species")
+grid.arrange(f1,f2,f3,f4)
+```
+
+
+From the above picture we can justify the missing whisker in the weight distribution because there is, for the cumulative function's graph, a vertical ascent up to just over 0.25 (that represent the 25-th percentile). As proof of the fact that the observations in this range gain a constant value (the same for each one), all this because cumulative function directly linked to the frequencies (occurrences) of the value.
+For the variable weight, the condictional median demostrate that into the dataset there is majority of heavier fish. 
+For all of the other variables is also shown the box-plot diagram.
+
+First of all, for each species is needed to create the rispectively subset (they will be required forward during the work):
+
+```{r}
+roach=subset(Fish_ok1, Species=="Roach")
+whitefish=subset(Fish_ok1, Species=="Whitefish") 
+parkki=subset(Fish_ok1, Species=="Parkki")
+bream=subset(Fish_ok1, Species=="Bream")
+perch=subset(Fish_ok1, Species=="Perch")
+pike=subset(Fish_ok1, Species=="Pike")
+smelt=subset(Fish_ok1, Species=="Smelt")
+```
+
+
+Note that from the last box-plots we can proof that not all variables are distribuited normally.
+Also we decided to conduct the following part of analysis only considering the most 2 numerosity groups: Perch and Bream respectively.
+Let's create a reduced dataset, which only contains the two species above mentioned :
+
+```{r}
+library(dplyr)
+perch_bream <-bind_rows(perch,bream)
+```
+
+
+and again let's see for the principal statistical indexes for this two species:
+
+
+```{r}
+library(data.table)
+DT<- data.table(perch_bream)
+perch_bream_indexes<-setnames(DT[, sapply(.SD, function(x) list(mean=round(mean(x), 3), sd=round(sd(x), 3))), by=Species], c("Species", sapply(names(DT)[-1], paste0, c(".men", ".SD"))))
+perch_bream_indexes
+```
+
+
+Now, for validating the hypoteses mentioned we can use graphic plots (in particular histograms) supported by a Normality-test, in particular is used the Shapiro-Wilk test.
+First af all, look at the histograms:
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+
+hist_weight<- ggplot(data = perch_bream, mapping = aes(x = Weight, color=Species, fill=Species)) +geom_histogram(alpha=0.5, position="stack", binwidth = 55)
+
+hist_len1<-ggplot(data = perch_bream, mapping = aes(x = Length1, color=Species, fill=Species)) +geom_histogram(alpha=0.5, position="stack", binwidth = 2.5) 
+
+hist_len2<-ggplot(data = perch_bream, mapping = aes(x = Length2, color=Species, fill=Species)) +geom_histogram(alpha=0.5, position="stack", binwidth = 3) 
+
+hist_len3<-ggplot(data = perch_bream, mapping = aes(x = Length3, color=Species, fill=Species)) +geom_histogram(alpha=0.5, position="stack", binwidth = 2) 
+
+hist_Hi<-ggplot(data = perch_bream, mapping = aes(x = Height, color=Species, fill=Species)) +
+geom_histogram(alpha=0.5, position="stack", binwidth = 1) 
+
+hist_wid<-ggplot(data = perch_bream, mapping = aes(x = Width, color=Species, fill=Species)) +
+geom_histogram(alpha=0.5, position="stack", binwidth = 0.5)
+
+grid.arrange(hist_weight,hist_len1,hist_len2,hist_len3,hist_Hi, hist_wid)
+```
+
+
+
+From the histograms, referred to each variable is clear that no variable is distribuited normally. 
+We can now validate this assumption by using analytics:
+
+
+
+```{r}
+library(ggpubr)
+shapiro.test(perch$Weight) 
+shapiro.test(bream$Weight)
+```
+
+
+First of all, for the species is clear that we have to reject the null hypoteses that the sample follow a Gaussian distribution, therefore in the second test referred to the second species, even though the histogram sudjested that the weigth is not distribuited normally, we understand that we cannot reject the null hypoteses H0.
+Is important to precisize that the results of the tests are function of the samples' numerosity.
+Just for let the reader know, Shapiro-Wilk test is a non-parametric test, which compare the values of a standardized Normal distributions with the sample's value. We can assume that it stand for a correlation index, in particular it use an alpha-level of 5%, where it represent the probability of commint the  first species (E1) error in rejecting the null hypoteses. In this case, infact, hypoteses are:
+
+H0: sample normally distribuited  vs H1: not normally distribuited
+
+## Looking for correlation and modelling 
+
+By using the following codes, we are looking for correlation between the target variable and one or more variables:
+
+```{r}
+library(corrplot)
+perch_no_col<-perch[2:7]
+res <- cor(perch_no_col)
+corrplot(res, type="upper", order="hclust", tl.col="black", tl.srt=45)
+```
+
+
+
+The following result are referred to the "Perch" species. From the matrix correlation, is easy to observe that there is strong correlation between all the variables. 
+Numerically, for the Pearson Rho Coefficient we can look at this matrix:
+
+
+
+```{r}
+round(res, 4)
+```
+
+
+All these values are good for the validation of a model where it wants to estimate the weight of a fish indirectly.
+Let's reproduce the same above instance for the "Bream" species:
+
+```{r}
+bream_no_col<-bream[2:7]
+res1 <- cor(bream_no_col)
+corrplot(res1, type="upper", order="hclust", tl.col="black", tl.srt=45)
+```
+```{r}
+round(res1, 4)
+```
+
+
+Without lost of generality we can now perform the reserch of a model, shown in the next session.
+
+
+## Linear Regression Model
+
+This part is dedicated to the research of a model which candidates for the weight estimation, by looking at the correlation between the weight and one or more variables.
+
+```{r}
+simple_regression_perch <- lm(Weight ~ Length3, data = perch)
+summary(simple_regression_perch)
+with(data=perch, plot(Weight~Length3,  main="PERCH"))
+abline(simple_regression_perch, lwd=2, col="red")
+```
+
+
+From the esamination of the graph it could be determined that the linear regression represents the correlation between the lenght and the weight of this kind of fish, because is  obtained a good value of R-squared.
+With the purpose of obtain a better value of R-squared, is also performed the multiple linear regression, in which, as argouments of the linear model function are passed all the variables.
+It is clear, that this time by using this method we obtain a better estimation of R-squared coefficient.
+
+From the outcome of the analysis is obtained:
+
+1. the value of the regression line coefficient of the intercept;
+2. the value of the regression coefficient of the slope;
+3. the 2 standard errors linked to the estimation of the coefficients;
+4. the value of the statistic test on the estimated coefficients, infact we are interested in     knowing if the coefficents are signifincantly diffrent from zero, because of in the           opposite  case would mean that the following model is not good;
+5. R-squared know as multiple determination index, which represent the global goodness of the
+   model in fitting the data, and so in explaining the correlation. It is a measure of the       right of the estimate model.
+  
+The standard deviation is obtained by considering the residual of the estimate model.
+The coefficients of the regression line are obtained by applying the method of least squares, which minimize the sum of the squares of the residuals between the observed values of Y and the theoretical ones.
+
+The above description can be generalized for all the others following parts.
+
+```{r}
+multiple_regression_perch <- lm(Weight ~ Length1+Length2+Length3+Height+Width, data = perch)
+summary(multiple_regression_perch)
+```
+
+
+```{r}
+simple_regression_bream <- lm(Weight ~ Length3, data = bream)
+summary(simple_regression_bream)
+with(data=bream, plot(Weight~Length3,  main="BREAM"))
+abline(simple_regression_bream, lwd=2, col="Blue")
+```
+
+In figure, it was determinated that the model does not fit well with the distribution because the counts of this species are less than the Perch species. 
+In the following calculation, is again used a multiple regression model.
+
+```{r}
+multiple_regression_bream <- lm(Weight ~ Length1+Length2+Length3+Height+Width, data = bream)
+summary(multiple_regression_bream)
+```
+The above multiple linear regression model, shows an increment of R-squared.
+
+Now, we decide to perform the same statistical analysis on all the dataset including all the species. From this point on, we wanted to dermine if the model fits all the data, indipendently from the type of the species.
+
+```{r}
+simple_regression_total <- lm(Weight ~ Length3, data = Fish_ok1)
+summary(simple_regression_total)
+with(data=Fish_ok1, plot(Weight~Length3, main="All Species", col=Species))
+abline(simple_regression_total, lwd=2, col="yellow")
+```
+
+What it is obtained is shown in the above figure.
+
+```{r}
+multiple_regression_total <-lm(Weight ~ Length1+Length2+Length3+Height+Width, data = Fish_ok1)
+summary(multiple_regression_total)
+```
+
+Looking at the last two values of R-squared is clear that the application of the model to the entire dataset has a smaller value of R-squared, respect to the applicaton on a single species, this because for all the dataset the data shows a bigger dispersion and so a major variability.
+Is clear from the theory, that R-squared is given by the ratio of a part of the variability respect to the total variability, since the residuals represent the  distance between the observed value and the theoretical values belonging to the straight line, in this case the greater variability of the points around it, will be greater such residues and overall there will be a greater deviation of the same.
+
+## Conclusions
+
+As consequence of this analysis work has been demostrated that it exsists a strong correlation between the weight of a fish and its physical dimensions, therefore it is possibile to use a linear regression model (simple or multiple) for explicate the target variable by the use of all the others variables. In particular a multiple regression model represents a perfect candidate in predicting the weight of a fish.
+This analysis, at the same time, had a dual objective, infact it show the comparison between two models: simple linear regression and multiple linear regression, which has shown itself to be more powerfull in terms of R-squared, because in trying to explain the mean weight of a fish with all the other available variables, is reduced the residual error and so a better R-squared is obtained.
+On the other hand it is clear,by looking at the results of the last analysis, that obtaining a model which better fits the values is required a dataset with a higer number of statistical units.
+
+
+
+
+
+
+
+
+
+
+
